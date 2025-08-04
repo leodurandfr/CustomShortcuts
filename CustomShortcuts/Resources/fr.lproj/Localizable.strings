@@ -1,0 +1,24 @@
+"About Custom Shortcuts" = "À propos de Custom Shortcuts";
+"Quit CustomShortcuts" = "Quitter CustomShortcuts";
+
+"Shortcut" = "Raccourci";
+"Name" = "Nom";
+"Old shortcut" = "Ancien raccourci";
+"New shortcut" = "Nouveau raccourci";
+"Cancel" = "Annuler";
+"Save" = "Sauvegarder";
+
+"No shortcuts" = "Aucun raccourcis";
+"Edit shortcut" = "Modifier le raccourci";
+
+"Add shortcuts that apply to the entire system" = "Ajouter un raccourci s'appliquant sur tout le système";
+"Add shortcuts specific to this application" = "Ajouter un raccourci s'appliquant spécifiquement sur cette application";
+"Add an application" = "Ajouter une application";
+"Add shortcut" = "Ajouter un raccourci";
+"Export shortcuts" = "Exporter mes raccourcis";
+"Import shortcuts" = "Importer des raccourcis";
+"All system" = "Tout le système";
+"Launch at startup" = "Lancer au démarrage";
+"Show/hide sidebar" = "Afficher/masquer la barre latérale";
+
+
