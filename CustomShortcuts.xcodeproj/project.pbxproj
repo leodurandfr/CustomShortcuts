@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		B32860AC2D1ACA1B00455DF8 /* HotKey in Frameworks */ = {isa = PBXBuildFile; productRef = B32860AB2D1ACA1B00455DF8 /* HotKey */; };
+		B3744C662E40F9CA00643660 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = B3744C652E40F9C500643660 /* README.md */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -31,6 +32,7 @@
 		B36DC7812D0AF50E0025A127 /* CustomShortcuts.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CustomShortcuts.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B36DC7922D0AF50F0025A127 /* CustomShortcutsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CustomShortcutsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B36DC79C2D0AF50F0025A127 /* CustomShortcutsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CustomShortcutsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B3744C652E40F9C500643660 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -93,6 +95,7 @@
 		B36DC7782D0AF50E0025A127 = {
 			isa = PBXGroup;
 			children = (
+				B3744C652E40F9C500643660 /* README.md */,
 				B36DC7832D0AF50E0025A127 /* CustomShortcuts */,
 				B36DC7952D0AF50F0025A127 /* CustomShortcuts-Tests */,
 				B36DC79F2D0AF50F0025A127 /* CustomShortcuts-UITests */,
@@ -243,6 +246,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B3744C662E40F9CA00643660 /* README.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
