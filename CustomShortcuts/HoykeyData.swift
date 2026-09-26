@@ -6,6 +6,8 @@ struct HotkeyData: Codable, Equatable {
     let keyCode: UInt16
     let modifiers: UInt
     let character: String
+    // Bouton de souris (2 = clic milieu, 3 et 4 = boutons latéraux…), nil pour une touche du clavier
+    let mouseButton: Int?
     
     // Initialisation standard
     init(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, character: String) {
@@ -15,6 +17,19 @@ struct HotkeyData: Codable, Equatable {
         // Utiliser uniquement les modificateurs fournis
         self.modifiers = modifiers.rawValue
         self.character = character
+        self.mouseButton = nil
+    }
+    
+    // Seuls ces modificateurs définissent un raccourci : Caps Lock, fn, pavé numérique
+    // ou les indicateurs internes des événements souris ne doivent pas empêcher la correspondance
+    static let shortcutModifiers: NSEvent.ModifierFlags = [.control, .option, .shift, .command]
+    
+    // Initialisation pour un bouton de souris
+    init(mouseButton: Int, modifiers: NSEvent.ModifierFlags) {
+        self.keyCode = 0
+        self.modifiers = modifiers.intersection(Self.shortcutModifiers).rawValue
+        self.character = ""
+        self.mouseButton = mouseButton
     }
     
     // Initialisation depuis un événement
@@ -26,6 +41,11 @@ struct HotkeyData: Codable, Equatable {
         self.keyCode = event.keyCode
         self.modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue
         self.character = character
+        self.mouseButton = nil
+    }
+    
+    var isMouseButton: Bool {
+        return mouseButton != nil
     }
     
     var modifierFlags: NSEvent.ModifierFlags {
@@ -33,15 +53,22 @@ struct HotkeyData: Codable, Equatable {
     }
     
     func matches(_ event: NSEvent) -> Bool {
-        let eventModifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        
-        // Vérifier si la touche correspond
-        let keyMatches = event.keyCode == keyCode
+        let eventModifiers = event.modifierFlags.intersection(Self.shortcutModifiers)
         
         // Vérifier si les modificateurs correspondent exactement
-        let modifiersMatch = eventModifiers == modifierFlags
+        guard eventModifiers == modifierFlags.intersection(Self.shortcutModifiers) else {
+            return false
+        }
         
-        return keyMatches && modifiersMatch && characterMatches(event)
+        if let mouseButton = mouseButton {
+            return event.type == .otherMouseDown && event.buttonNumber == mouseButton
+        }
+        
+        // keyCode et characters ne sont valides que pour un événement clavier
+        guard event.type == .keyDown else {
+            return false
+        }
+        return event.keyCode == keyCode && characterMatches(event)
     }
 
     // Vérifie que la touche produit toujours le caractère enregistré : après un changement
@@ -71,21 +98,27 @@ struct HotkeyData: Codable, Equatable {
         if modifiers.contains(.shift) { result += "⇧" }
         if modifiers.contains(.command) { result += "⌘" }
         
-        // Ne pas convertir en majuscule, utiliser le caractère tel quel
-        result += character
+        if let mouseButton = mouseButton {
+            // Numérotation usuelle : 1 = gauche, 2 = droit, 3 = milieu, 4 et 5 = latéraux
+            result += String(format: NSLocalizedString("Mouse button %d", comment: ""), mouseButton + 1)
+        } else {
+            // Ne pas convertir en majuscule, utiliser le caractère tel quel
+            result += character
+        }
         
         return result
     }
     
     // Méthodes supplémentaires pour Codable
     enum CodingKeys: String, CodingKey {
-        case keyCode, modifiers, character
+        case keyCode, modifiers, character, mouseButton
     }
     
     // Vérification d'égalité
     static func == (lhs: HotkeyData, rhs: HotkeyData) -> Bool {
         return lhs.keyCode == rhs.keyCode &&
                lhs.modifiers == rhs.modifiers &&
-               lhs.character == rhs.character
+               lhs.character == rhs.character &&
+               lhs.mouseButton == rhs.mouseButton
     }
 }

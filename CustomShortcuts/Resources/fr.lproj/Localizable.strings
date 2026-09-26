@@ -10,6 +10,7 @@
 
 "No shortcuts" = "Aucun raccourcis";
 "Edit shortcut" = "Modifier le raccourci";
+"Mouse button %d" = "Bouton souris %d";
 
 "Add shortcuts that apply to the entire system" = "Ajouter un raccourci s'appliquant sur tout le système";
 "Add shortcuts specific to this application" = "Ajouter un raccourci s'appliquant spécifiquement sur cette application";

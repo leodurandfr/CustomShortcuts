@@ -29,6 +29,8 @@ struct HotkeyRecorderField: View {
     @Binding var isRecording: Bool
     let isDisabled: Bool
     let isAlternate: Bool
+    // Accepte les boutons de souris (milieu, latéraux…) en plus des touches du clavier
+    let allowsMouseButtons: Bool
     @State private var isEditing = false
     @State private var editedText: String = ""
     @State private var isHovered = false
@@ -37,11 +39,12 @@ struct HotkeyRecorderField: View {
     @Environment(\.colorScheme) var colorScheme
     let id = UUID()
     
-    init(hotkeyData: Binding<HotkeyData?>, isRecording: Binding<Bool>, isDisabled: Bool, isAlternate: Bool = false) {
+    init(hotkeyData: Binding<HotkeyData?>, isRecording: Binding<Bool>, isDisabled: Bool, isAlternate: Bool = false, allowsMouseButtons: Bool = false) {
         self._hotkeyData = hotkeyData
         self._isRecording = isRecording
         self.isDisabled = isDisabled
         self.isAlternate = isAlternate
+        self.allowsMouseButtons = allowsMouseButtons
     }
     
     var body: some View {
@@ -52,7 +55,8 @@ struct HotkeyRecorderField: View {
                 .padding(.horizontal, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
             
-            if !isDisabled && (isHovered || isEditing) {
+            // Un bouton de souris ne peut pas être saisi au clavier : il s'enregistre uniquement par clic
+            if !isDisabled && (isHovered || isEditing) && hotkeyData?.isMouseButton != true {
                 Button(action: {
                     if isRecording {
                         stopRecording()
@@ -168,8 +172,19 @@ struct HotkeyRecorderField: View {
         RecordingManager.shared.stopCurrentRecording()
         RecordingManager.shared.currentlyRecordingField = id
         
-        RecordingManager.shared.globalEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+        let eventMask: NSEvent.EventTypeMask = allowsMouseButtons ? [.keyDown, .otherMouseDown] : .keyDown
+        RecordingManager.shared.globalEventMonitor = NSEvent.addLocalMonitorForEvents(matching: eventMask) { event in
             if isRecording && RecordingManager.shared.currentlyRecordingField == id {
+                let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                
+                // Clics gauche et droit exclus : ils servent à piloter l'interface
+                if event.type == .otherMouseDown {
+                    hotkeyData = HotkeyData(mouseButton: event.buttonNumber, modifiers: modifiers)
+                    stopRecording()
+                    isRecording = false
+                    return nil
+                }
+                
                 if event.keyCode == 53 {
                     stopRecording()
                     isRecording = false
@@ -179,7 +194,6 @@ struct HotkeyRecorderField: View {
                     return nil
                 }
                 
-                let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
                 let keyCode = event.keyCode
                 
                 var character: String

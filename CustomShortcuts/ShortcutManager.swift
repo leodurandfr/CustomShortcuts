@@ -11,6 +11,8 @@ class ShortcutManager: ObservableObject {
     @Published var isAccessibilityEnabled = false
     private var activeShortcuts: [UUID: (eventTap: CFMachPort, sourceHotkey: HotkeyData, targetHotkey: HotkeyData)] = [:]
     private var permissionTimer: Timer?
+    // Boutons de souris dont l'appui a été remplacé : leur relâchement doit aussi être supprimé
+    private var suppressedMouseButtons = Set<Int>()
     
     // MARK: - Initialization
     private init() {
@@ -88,7 +90,8 @@ class ShortcutManager: ObservableObject {
     }
     
     private func simulateKeyPress(_ hotkeyData: HotkeyData) {
-        guard let source = CGEventSource(stateID: .hidSystemState),
+        guard !hotkeyData.isMouseButton,
+              let source = CGEventSource(stateID: .hidSystemState),
               let keyDown = CGEvent(keyboardEventSource: source, virtualKey: hotkeyData.keyCode, keyDown: true),
               let keyUp = CGEvent(keyboardEventSource: source, virtualKey: hotkeyData.keyCode, keyDown: false) else {
             return
@@ -109,34 +112,56 @@ class ShortcutManager: ObservableObject {
     }
     
     private func handleEvent(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
-        guard type == .keyDown,
+        // macOS coupe l'event tap (traitement trop long, saisie sécurisée…) : on réactive les taps encore actifs
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            for shortcut in activeShortcuts.values {
+                CGEvent.tapEnable(tap: shortcut.eventTap, enable: true)
+            }
+            return Unmanaged.passUnretained(event)
+        }
+        
+        let mouseButton = Int(event.getIntegerValueField(.mouseEventButtonNumber))
+        switch type {
+        case .otherMouseUp, .otherMouseDragged:
+            // Relâchement ou glisser d'un bouton dont l'appui a été remplacé : supprimé lui aussi
+            let isSuppressed = suppressedMouseButtons.contains(mouseButton)
+            if type == .otherMouseUp {
+                suppressedMouseButtons.remove(mouseButton)
+            }
+            return isSuppressed ? nil : Unmanaged.passUnretained(event)
+        case .otherMouseDown:
+            // Un nouvel appui efface un état resté en suspens (relâchement jamais reçu)
+            suppressedMouseButtons.remove(mouseButton)
+        default:
+            break
+        }
+        
+        guard type == .keyDown || type == .otherMouseDown,
               let nsEvent = NSEvent(cgEvent: event),
               let currentApp = NSWorkspace.shared.frontmostApplication,
               let bundleId = currentApp.bundleIdentifier else {
-            return Unmanaged.passRetained(event)
+            return Unmanaged.passUnretained(event)
         }
         
-        // Vérifier d'abord les mappings spécifiques à l'application
-        if let appMapping = self.mappings.first(where: {
-            $0.context == bundleId &&
-            $0.isEnabled &&
-            $0.sourceHotkey?.matches(nsEvent) == true
-        }) {
-            self.simulateKeyPress(appMapping.targetHotkey!)
-            return nil
+        // Vérifier d'abord les mappings spécifiques à l'application, puis les mappings système
+        let matchingMapping = [bundleId, "system"].lazy.compactMap { context in
+            self.mappings.first(where: {
+                $0.context == context &&
+                $0.isEnabled &&
+                $0.sourceHotkey?.matches(nsEvent) == true
+            })
+        }.first
+        
+        // La cible doit être une touche du clavier : sinon on laisse passer l'événement d'origine
+        guard let mapping = matchingMapping, let target = mapping.targetHotkey, !target.isMouseButton else {
+            return Unmanaged.passUnretained(event)
         }
         
-        // Ensuite vérifier les mappings système
-        if let systemMapping = self.mappings.first(where: {
-            $0.context == "system" &&
-            $0.isEnabled &&
-            $0.sourceHotkey?.matches(nsEvent) == true
-        }) {
-            self.simulateKeyPress(systemMapping.targetHotkey!)
-            return nil
+        if type == .otherMouseDown {
+            suppressedMouseButtons.insert(mouseButton)
         }
-        
-        return Unmanaged.passRetained(event)
+        simulateKeyPress(target)
+        return nil
     }
     
     // MARK: - Public Methods
@@ -273,7 +298,12 @@ class ShortcutManager: ObservableObject {
             activeShortcuts.removeValue(forKey: id)
         }
         
-        let eventMask = (1 << CGEventType.keyDown.rawValue)
+        // Chaque tap n'écoute que le type d'entrée de son mapping : les clics ne ralentissent pas les mappings clavier
+        let eventMask = source.isMouseButton
+            ? (1 << CGEventType.otherMouseDown.rawValue)
+                | (1 << CGEventType.otherMouseUp.rawValue)
+                | (1 << CGEventType.otherMouseDragged.rawValue)
+            : (1 << CGEventType.keyDown.rawValue)
         let selfPtr = Unmanaged.passRetained(self).toOpaque()
         
         guard let eventTap = CGEvent.tapCreate(

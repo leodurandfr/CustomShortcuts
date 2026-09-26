@@ -41,7 +41,8 @@ struct HotkeyMappingRow: View {
                 hotkeyData: $mapping.sourceHotkey,
                 isRecording: $isRecordingSource,
                 isDisabled: mapping.isEnabled,
-                isAlternate: isAlternate // Transmettre l'info isAlternate
+                isAlternate: isAlternate, // Transmettre l'info isAlternate
+                allowsMouseButtons: true // Le raccourci déclencheur peut être un bouton de souris
             )
             .frame(minWidth: 140, idealWidth: 140)
             
