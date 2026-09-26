@@ -41,7 +41,7 @@ xcodebuild test -project CustomShortcuts.xcodeproj -scheme CustomShortcutsUITest
 - Team ID: `7C2S8B9978` (set in project.pbxproj)
 - Bundle ID: `leodurand.CustomShortcuts`
 - Deployment target: macOS 15.1 (but README states macOS 11.0+)
-- App Sandbox: Enabled
+- App Sandbox: Disabled (`ENABLE_APP_SANDBOX = NO`, empty entitlements file)
 - Hardened Runtime: Enabled
 
 ## Architecture
