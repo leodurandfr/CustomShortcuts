@@ -41,10 +41,25 @@ struct HotkeyData: Codable, Equatable {
         // Vérifier si les modificateurs correspondent exactement
         let modifiersMatch = eventModifiers == modifierFlags
         
-        // Vérifier si le caractère correspond en ignorant la casse
-        let charMatches = event.charactersIgnoringModifiers?.lowercased() == character.lowercased()
-        
-        return keyMatches && modifiersMatch && charMatches
+        return keyMatches && modifiersMatch && characterMatches(event)
+    }
+
+    // Vérifie que la touche produit toujours le caractère enregistré : après un changement
+    // de disposition (AZERTY → QWERTY), un même keyCode ne désigne plus la même touche
+    private func characterMatches(_ event: NSEvent) -> Bool {
+        if character.isEmpty || event.charactersIgnoringModifiers?.lowercased() == character.lowercased() {
+            return true
+        }
+
+        // Une touche morte (^, ¨…) n'a pas de caractère dans l'événement : on le lit dans la disposition
+        let layers: [NSEvent.ModifierFlags] = [[], [.shift], modifierFlags.intersection([.shift, .option])]
+        let layoutCharacters = layers.compactMap { KeyboardLayout.character(for: keyCode, modifiers: $0) }
+
+        // Disposition illisible : on se fie à la touche physique
+        if layoutCharacters.isEmpty {
+            return true
+        }
+        return layoutCharacters.contains { $0.lowercased() == character.lowercased() }
     }
     
     func toString() -> String {

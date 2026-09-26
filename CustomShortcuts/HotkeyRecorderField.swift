@@ -182,11 +182,16 @@ struct HotkeyRecorderField: View {
                 let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
                 let keyCode = event.keyCode
                 
-                let character: String
+                var character: String
                 if modifiers.contains(.shift) {
                     character = event.characters ?? ""
                 } else {
                     character = event.charactersIgnoringModifiers ?? ""
+                }
+                // Les touches mortes (^, ¨…) ne produisent aucun caractère, et ⌃ en produit un invisible
+                // (ex. ⌃⇧A → "\u{01}") : on lit alors le caractère dans la disposition
+                if character.isEmpty || character.unicodeScalars.allSatisfy({ CharacterSet.controlCharacters.contains($0) }) {
+                    character = KeyboardLayout.character(for: keyCode, modifiers: modifiers.intersection(.shift)) ?? character
                 }
                 
                 hotkeyData = HotkeyData(
@@ -248,7 +253,10 @@ struct PopoverContent: View {
             .cornerRadius(6)
             .padding(.horizontal)
             .onChange(of: editedText) { oldValue, newValue in
-                formatEditedText(newValue)
+                let formatted = formattedText(newValue, previous: oldValue)
+                if formatted != newValue {
+                    editedText = formatted
+                }
             }
             
             HStack(spacing: 4) {
@@ -274,7 +282,7 @@ struct PopoverContent: View {
                 }
             .padding(.horizontal)
             Button(action: {
-                if let newHotkeyData = parseEditedText(editedText) {
+                if let newHotkeyData = parseEditedText(currentText()) {
                     hotkeyData = newHotkeyData
                 }
                 isEditing = false
@@ -304,57 +312,55 @@ struct PopoverContent: View {
         editedText.contains(modifier)
     }
     
-    private func formatEditedText(_ newValue: String) {
-        if newValue.isEmpty {
-            return
+    // Texte réellement affiché dans le champ, mis en forme.
+    // Une touche morte (^, ¨…) reste « en attente » : affichée mais absente de editedText.
+    // On la valide comme le ferait macOS, puis on lit le champ directement car editedText
+    // et sa mise en forme (onChange) ne sont pas encore à jour à cet instant.
+    private func currentText() -> String {
+        guard let editor = NSApp.keyWindow?.firstResponder as? NSTextView,
+              editor.hasMarkedText() else {
+            return editedText
         }
-        
-        let hasControl = newValue.contains("⌃")
-        let hasOption = newValue.contains("⌥")
-        let hasShift = newValue.contains("⇧")
-        let hasCommand = newValue.contains("⌘")
-        
-        var modifiers = ""
-        if hasControl { modifiers += "⌃" }
-        if hasOption { modifiers += "⌥" }
-        if hasShift { modifiers += "⇧" }
-        if hasCommand { modifiers += "⌘" }
-        
-        let nonModifiers = newValue
+        let previousText = editedText
+        let markedRange = editor.markedRange()
+        let pendingText = (editor.string as NSString).substring(with: markedRange)
+        editor.insertText(pendingText, replacementRange: markedRange)
+        return formattedText(editor.string, previous: previousText)
+    }
+    
+    private func withoutModifiers(_ text: String) -> String {
+        text
             .replacingOccurrences(of: "⌃", with: "")
             .replacingOccurrences(of: "⌥", with: "")
             .replacingOccurrences(of: "⇧", with: "")
             .replacingOccurrences(of: "⌘", with: "")
-        
-        let character = nonModifiers.isEmpty ? "" : String(nonModifiers.prefix(1))
-        let formattedText = modifiers + character
-        
-        if formattedText != newValue {
-            editedText = formattedText
+    }
+    
+    // Modificateurs dans l'ordre standard (⌃⌥⇧⌘) suivis d'un seul caractère
+    private func formattedText(_ text: String, previous: String) -> String {
+        if text.isEmpty {
+            return text
         }
+        
+        var modifiers = ""
+        for modifier in ["⌃", "⌥", "⇧", "⌘"] where text.contains(modifier) {
+            modifiers += modifier
+        }
+        
+        // Garde le caractère nouvellement tapé plutôt que l'ancien (ex. "⌘Q" + "^" → "⌘^")
+        let characters = withoutModifiers(text).filter { !$0.isWhitespace }
+        let previousCharacter = withoutModifiers(previous)
+        let character = characters.first(where: { String($0) != previousCharacter }) ?? characters.first
+        
+        return modifiers + (character.map(String.init) ?? "")
     }
     
     private func toggleModifier(_ modifier: String) {
-        if hasModifier(modifier) {
-            editedText = editedText.replacingOccurrences(of: modifier, with: "")
+        let text = currentText()
+        if text.contains(modifier) {
+            editedText = text.replacingOccurrences(of: modifier, with: "")
         } else {
-            let baseKey = editedText
-                .replacingOccurrences(of: "⌃", with: "")
-                .replacingOccurrences(of: "⌥", with: "")
-                .replacingOccurrences(of: "⇧", with: "")
-                .replacingOccurrences(of: "⌘", with: "")
-                .trimmingCharacters(in: .whitespaces)
-            
-            let singleCharacter = baseKey.isEmpty ? "" : String(baseKey.prefix(1))
-            
-            var newModifiers = ""
-            for mod in ["⌃", "⌥", "⇧", "⌘"] {
-                if mod == modifier || hasModifier(mod) {
-                    newModifiers += mod
-                }
-            }
-            
-            editedText = newModifiers + singleCharacter
+            editedText = formattedText(modifier + text, previous: text)
         }
     }
     
@@ -365,26 +371,16 @@ struct PopoverContent: View {
         if text.contains("⇧") { modifiers.insert(.shift) }
         if text.contains("⌘") { modifiers.insert(.command) }
         
-        let character = text
-            .replacingOccurrences(of: "⌃", with: "")
-            .replacingOccurrences(of: "⌥", with: "")
-            .replacingOccurrences(of: "⇧", with: "")
-            .replacingOccurrences(of: "⌘", with: "")
-            .trimmingCharacters(in: .whitespaces)
+        let character = withoutModifiers(text).trimmingCharacters(in: .whitespaces)
         
         let singleCharacter = character.isEmpty ? "" : String(character.prefix(1))
         
-        if !singleCharacter.isEmpty {
-            for keyCode in 0...127 {
-                if let event = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(keyCode), keyDown: true),
-                   let nsEvent = NSEvent(cgEvent: event),
-                   let char = nsEvent.charactersIgnoringModifiers,
-                   char.lowercased() == singleCharacter.lowercased() {
-                    return HotkeyData(keyCode: UInt16(keyCode), modifiers: modifiers, character: singleCharacter)
-                }
-            }
+        guard !singleCharacter.isEmpty,
+              let key = KeyboardLayout.keyCode(for: singleCharacter) else {
+            return nil
         }
-        
-        return nil
+
+        // Ajoute les modificateurs nécessaires pour produire le caractère (ex. ⇧ pour "?" en AZERTY)
+        return HotkeyData(keyCode: key.keyCode, modifiers: modifiers.union(key.modifiers), character: singleCharacter)
     }
 }
